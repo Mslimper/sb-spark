@@ -20,9 +20,13 @@ object data_mart {
     val hdfs_df = spark.read.json("/labs/laba03/weblogs.json")
 
     //elastic
-    val elastic_df = spark.read.format("es")
+    val elastic_df = spark.read.format("org.elasticsearch.spark.sql")
       .option("es.nodes", "10.0.1.9")
       .option("es.port", "9200")
+      .option("es.batch.write.refresh", "false")
+      .option("es.nodes.wan.only", "true")
+      .option("es.net.http.auth.user", "mikhail.pykhtin")
+      .option("es.net.http.auth.pass", "9mYHPVhT")
       .load("visits*")
 
     //cassandra
