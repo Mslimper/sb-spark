@@ -17,7 +17,7 @@ object data_mart {
     
     //hdfs
 
-    val hdfs_df = spark.read.json("/labs/laba03/webLogs.json")
+    val hdfs_df = spark.read.json("/labs/laba03/weblogs.json")
 
     //elastic
     val elastic_df = spark.read.format("es")
