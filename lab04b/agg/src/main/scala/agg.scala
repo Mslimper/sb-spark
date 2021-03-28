@@ -43,12 +43,12 @@ object agg {
     val parsed_df = kafka_df.select(col("value").cast(StringType).as("json"))
       .select(from_json(col("json"), schema).as("data"))
       .select("data.*")
-      .withColumn("timestamp", (col("timestamp") / 1000).cast("TimestampType"))
+      .withColumn("timestamp", (col("timestamp") / 1000).cast("timestamp"))
 
 
     val stream_data = parsed_df
-      .withWatermark("timestamp", "2 hour")
-      .groupBy(window(col("timestamp"), "1 hour", "1 hour").as("window_tf"))
+      .withWatermark("timestamp", "2 hours")
+      .groupBy(window(col("timestamp"), "1 hours", "1 hours").as("window_tf"))
       .agg(
         sum(when(col("event_type") === lit("buy"), col("item_price"))).as("revenue"),
         count(when(col("uid").isNotNull, col("uid"))).as("visitors"),
