@@ -36,7 +36,7 @@ object agg {
     TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
 
     val viewFS = FileSystem.get(spark.sparkContext.hadoopConfiguration)
-    
+
     val viewPath = new Path(checkpointDirectory)
     if (viewFS.exists(viewPath))
       viewFS.delete(viewPath, true)
@@ -47,6 +47,7 @@ object agg {
       .format("kafka")
       .option("kafka.bootstrap.servers", kafkaBrokers)
       .option("subscribe", topicNameIn)
+      .option("startingOffsets", """earliest""")
       .load()
 
 
@@ -81,6 +82,7 @@ object agg {
 
     println(kafkaOutput.lastProgress)
     println(kafkaOutput.status)
+
 
     spark.streams.awaitAnyTermination()
 
