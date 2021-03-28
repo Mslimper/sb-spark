@@ -1,64 +1,88 @@
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
+
+import java.util.TimeZone
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.sql.streaming.{ProcessingTime, StreamingQueryListener, Trigger}
+import org.apache.spark.sql.{SparkSession, functions => f}
+import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
+
 
 object agg {
 
-  def main(args: Array[String]) {
-    val spark = SparkSession.builder().appName(name = "Pykhtin.Lab04b").getOrCreate()
+  private val batchTimeSeconds = 5
+  private val checkpointDirectory = "hdfs:///user/mikhail.pykhtin/streamingCheckpoints"
+  private val kafkaBrokers = "spark-master-1:6667"
+  private val topicNameIn = "mikhail_pykhtin"
+  private val topicNameOut = "mikhail_pykhtin_lab04b_out"
 
-    val schema = StructType(
-      List(
-        StructField("event_type", StringType, nullable = true),
-        StructField("category", StringType, nullable = true),
-        StructField("item_id", StringType, nullable = true),
-        StructField("item_price", IntegerType, nullable = true),
-        StructField("uid", StringType, nullable = true),
-        StructField("timestamp", LongType, nullable = true)
-      )
+  private val eventScheme = StructType(
+    Array(
+      StructField("event_type", StringType),
+      StructField("category", StringType),
+      StructField("item_id", StringType),
+      StructField("item_price", LongType),
+      StructField("uid", StringType),
+      StructField("timestamp", LongType)
     )
+  )
 
-    val kafka_df = spark.readStream
+  def main(args: Array[String]) {
+
+    val spark = SparkSession
+      .builder()
+      .appName("Pykhtin.Lab04b")
+      .config("spark.sql.session.timeZone", "UTC")
+      .getOrCreate()
+    spark.sparkContext.setLogLevel("ERROR")
+    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+
+    val viewFS = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+    
+    val viewPath = new Path(checkpointDirectory)
+    if (viewFS.exists(viewPath))
+      viewFS.delete(viewPath, true)
+    println("commit log has been cleaned")
+
+    val kafka_df = spark
+      .readStream
       .format("kafka")
-      .option("kafka.bootstrap.servers", "spark-master-1:6667")
-      .option("subscribe", "mikhail_pykhtin")
-      .option("startingOffsets", """earliest""")
-      //.option("maxOffsetsPerTrigger", "5")
-      .option("checkpointLocation", "lab4b/checkpoint_in")
-      .load
-
-    val parsed_df = kafka_df.select(col("value").cast(StringType).as("json"))
-      .select(from_json(col("json"), schema).as("data"))
-      .select("data.*")
-      .withColumn("timestamp", (col("timestamp") / 1000).cast("timestamp"))
+      .option("kafka.bootstrap.servers", kafkaBrokers)
+      .option("subscribe", topicNameIn)
+      .load()
 
 
-    val stream_data = parsed_df
-      .withWatermark("timestamp", "2 hour")
-      .groupBy(window(col("timestamp"), "1 hour", "1 hour").as("window_tf"))
+    val agg_df = kafka_df
+      .select(f.from_json(f.col("value").cast("string"), eventScheme).as("json"))
+      .select("json.*")
+      .withColumn("eventTime", f.from_unixtime(f.col("timestamp") / 1000))
+      .groupBy(f.window(f.col("eventTime"), "1 hour").as("ts"))
       .agg(
-        sum(when(col("event_type") === lit("buy"), col("item_price"))).as("revenue"),
-        count(when(col("uid").isNotNull, col("uid"))).as("visitors"),
-        count(when(col("event_type") === lit("buy"), col("event_type"))).as("purchases"),
-        avg(when(col("event_type") === lit("buy"), col("item_price"))).as("aov")
+        f.sum(f.when(f.col("uid").isNotNull, 1)).as("visitors"),
+        f.sum(f.when(f.col("event_type") === "buy", f.col("item_price"))).as("revenue"),
+        f.sum(f.when(f.col("event_type") === "buy", 1)).as("purchases")
       )
-      .select(col("window_tf").getField("start").cast("long").as("start_ts"),
-        col("window_tf").getField("end").cast("long").as("end_ts"),
-        col("revenue"), col("visitors"),
-        col("purchases"), col("aov"))
-      .toJSON
-
-    val stream_kafka = stream_data
+      .select(
+        f.unix_timestamp(f.col("ts").getField("start")).as("start_ts"),
+        f.unix_timestamp(f.col("ts").getField("end")).as("end_ts"),
+        f.col("revenue"),
+        f.col("visitors"),
+        f.col("purchases"),
+        (f.col("revenue") / f.col("purchases")).as("aov")
+      )
+    val kafkaOutput = agg_df
+      .select(f.to_json(f.struct(f.col("*"))).as("value"))
       .writeStream
       .format("kafka")
-      .option("kafka.bootstrap.servers", "spark-master-1:6667")
-      .option("topic", "mikhail_pykhtin_lab04b_out")
-      .option("checkpointLocation", "lab4b/checkpoint_out")
+      .option("kafka.bootstrap.servers", kafkaBrokers)
+      .option("topic", topicNameOut)
       .outputMode("update")
+      .trigger(Trigger.ProcessingTime(s"$batchTimeSeconds seconds"))
+      .option("checkpointLocation", checkpointDirectory)
       .start()
-      .awaitTermination()
 
+    println(kafkaOutput.lastProgress)
+    println(kafkaOutput.status)
 
-    spark.stop()
+    spark.streams.awaitAnyTermination()
+
   }
 }
