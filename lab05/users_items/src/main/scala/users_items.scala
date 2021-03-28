@@ -25,11 +25,11 @@ object users_items {
       })
     }
 
-    val spark = SparkSession.builder().appName(name = "Khanin.Lab05").getOrCreate()
+    val spark = SparkSession.builder().appName(name = "Pykhtin.Lab05").getOrCreate()
     spark.sparkContext.setLogLevel("ERROR")
     val confOutputDir = spark.conf.get("spark.users_items.output_dir", "/user/mikhail.pykhtin/users-items")
     val confInputDir = spark.conf.get("spark.users_items.input_dir", "/user/mikhail.pykhtin/visits")
-    val confUpdate = if (spark.conf.get("spark.users_items.update") == "1") 1 else 0
+    val confUpdate = spark.conf.get("spark.users_items.update", "0")
 
     println(s"Update param is $confUpdate")
     println(s"confInputDir param is $confInputDir")
