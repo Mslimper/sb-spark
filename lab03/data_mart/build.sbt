@@ -3,15 +3,12 @@ name := "data_mart"
 version := "1.0"
 
 scalaVersion := "2.11.12"
+libraryDependencies += "org.apache.spark" %% "spark-core" % "2.4.7"
 
-// https://mvnrepository.com/artifact/com.datastax.spark/spark-cassandra-connector
-libraryDependencies += "com.datastax.spark" %% "spark-cassandra-connector" % "2.4.3"
+libraryDependencies += "org.apache.spark" % "spark-sql_2.11" % "2.4.7"
 
-// https://mvnrepository.com/artifact/org.elasticsearch/elasticsearch-spark-20
-libraryDependencies += "org.elasticsearch" %% "elasticsearch-spark-20" % "7.11.2"
+libraryDependencies += "com.datastax.spark" % "spark-cassandra-connector_2.12" % "3.0.0"
 
-// https://mvnrepository.com/artifact/org.postgresql/postgresql
+libraryDependencies += "org.elasticsearch" % "elasticsearch-spark-20_2.11" % "7.11.2"
+
 libraryDependencies += "org.postgresql" % "postgresql" % "42.2.19"
-
-// https://mvnrepository.com/artifact/org.apache.spark/spark-sql
-libraryDependencies += "org.apache.spark" %% "spark-sql" % "2.4.7"
